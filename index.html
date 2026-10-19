@@ -29,16 +29,17 @@ h1{font-size:28px;letter-spacing:.2em;margin:22px 0 4px}
 @keyframes pulse{0%,100%{transform:scale(.97);filter:brightness(.9)}50%{transform:scale(1.04);filter:brightness(1.18)}}
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes wave{0%,100%{height:8px}50%{height:30px}}
-.state{font-size:13px;color:var(--cyan);margin-top:-3px;min-height:20px}
+.state{font-size:13px;color:var(--cyan);margin-top:-3px;min-height:20px;text-align:center}
 .card{width:100%;background:linear-gradient(145deg,#0b1b2cdd,#07111fdd);border:1px solid #1a3a52;border-radius:20px;padding:16px}
 .label{font-size:10px;color:var(--muted);letter-spacing:.18em;text-transform:uppercase;margin-bottom:8px}
-#reply{line-height:1.5;min-height:48px;font-size:15px;overflow-wrap:anywhere}
+#reply{line-height:1.65;min-height:48px;font-size:15px;overflow-wrap:anywhere;white-space:pre-wrap}
 #heard{font-size:12px;color:#9db7c9;margin-top:8px;min-height:18px;overflow-wrap:anywhere}
 .controls{display:grid;grid-template-columns:1fr 1fr;gap:10px;width:100%;margin:14px 0}
 button,select{font:inherit;color:var(--white);background:#102a40;border:1px solid #28617e;border-radius:14px;padding:13px 12px}
 button{cursor:pointer;min-height:48px}
-button:disabled{opacity:.6}
+button:disabled{opacity:.6;cursor:wait}
 button.primary{background:linear-gradient(120deg,#087fb9,#1453a0);border-color:#50d9ff;font-weight:650}
+button:focus-visible,select:focus-visible{outline:2px solid var(--cyan);outline-offset:3px}
 .settings{width:100%;display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px}
 select{width:100%;padding:11px}
 .small{font-size:11px;line-height:1.55;color:#7895aa;text-align:center;margin-top:17px}
@@ -46,17 +47,28 @@ select{width:100%;padding:11px}
 .cmd{display:flex;gap:10px;align-items:flex-start;border-bottom:1px solid #183043;padding:10px 0;font-size:13px;color:#c4d9e7}
 .cmd b{color:#74e9ff;min-width:75px}
 @media(max-height:760px){.orb-wrap{height:195px}.orb{width:140px;height:140px}}
+@media(prefers-reduced-motion:reduce){.orb,.orb:before,.orb:after,.wave i{animation:none}}
 </style>
 </head>
 
 <body>
 <main class="app">
-  <div class="top"><span>PERSONAL AI SYSTEM</span><span class="pill">PROTOTYPE</span></div>
+  <div class="top">
+    <span>PERSONAL AI SYSTEM</span>
+    <span class="pill">PROTOTYPE</span>
+  </div>
+
   <h1>F.R.I.D.A.Y.</h1>
   <div class="sub">Your personal assistant</div>
 
   <div class="orb-wrap">
-    <div class="orb"><div class="core"><div class="wave"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div></div>
+    <div class="orb">
+      <div class="core">
+        <div class="wave">
+          <i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+        </div>
+      </div>
+    </div>
   </div>
 
   <div class="state" id="state">SYSTEM READY · TAP TO SPEAK</div>
@@ -85,7 +97,7 @@ select{width:100%;padding:11px}
     <div>
       <div class="label">Voice preference</div>
       <select id="voice">
-        <option value="auto">Default available</option>
+        <option value="auto">Best available voice</option>
         <option value="female">Prefer female voice</option>
       </select>
     </div>
@@ -95,29 +107,71 @@ select{width:100%;padding:11px}
     <div class="label">Try saying</div>
     <div class="cmd"><b>Hello Friday</b><span>Greet your assistant</span></div>
     <div class="cmd"><b>What time?</b><span>Hear the current time</span></div>
-    <div class="cmd"><b>Battery status</b><span>Battery level if browser supports it</span></div>
+    <div class="cmd"><b>Battery status</b><span>Battery level if supported</span></div>
     <div class="cmd"><b>Open YouTube</b><span>Try opening YouTube in a new tab</span></div>
   </section>
 
-  <div class="small">Prototype only. This page does not continuously listen, read phone notifications, or control all Android settings.</div>
+  <div class="small">
+    Prototype only. Continuous listening, notifications and full phone control are not supported.
+  </div>
 </main>
 
 <script>
 (() => {
   const $ = id => document.getElementById(id);
   const WORKER_URL = "https://friday-ai-brain.maverickvolg.workers.dev";
+
   let recognition = null;
   let isThinking = false;
+  let voices = [];
+  let requestNumber = 0;
 
   function state(message) {
     $("state").textContent = message.toUpperCase();
+  }
+
+  function loadVoices() {
+    if (!("speechSynthesis" in window)) return;
+    voices = speechSynthesis.getVoices() || [];
+  }
+
+  if ("speechSynthesis" in window) {
+    loadVoices();
+    speechSynthesis.onvoiceschanged = loadVoices;
+  }
+
+  function selectVoice(language, preference) {
+    loadVoices();
+
+    const lang = language.toLowerCase();
+    const base = lang.split("-")[0];
+
+    const matching = voices.filter(v =>
+      v.lang.toLowerCase().startsWith(base)
+    );
+
+    if (!matching.length) return null;
+
+    if (preference === "female") {
+      const female = matching.find(v =>
+        /female|woman|zira|samantha|susan|karen|moira|tessa|veena|heera|lekha/i.test(v.name)
+      );
+
+      if (female) return female;
+    }
+
+    const exact = matching.find(v =>
+      v.lang.toLowerCase() === lang
+    );
+
+    return exact || matching[0];
   }
 
   function speak(text) {
     $("reply").textContent = text;
 
     if (!("speechSynthesis" in window)) {
-      state("Text response ready - speech unavailable");
+      state("Text ready · Speech unavailable");
       return;
     }
 
@@ -125,26 +179,33 @@ select{width:100%;padding:11px}
 
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = $("language").value;
-    utterance.rate = 0.96;
-    utterance.pitch = 1.08;
 
-    const voices = speechSynthesis.getVoices();
-    const isTamil = utterance.lang.startsWith("ta");
-    const matching = voices.filter(v =>
-      v.lang.toLowerCase().startsWith(isTamil ? "ta" : "en")
+    // Natural, slightly slower speaking pace
+    utterance.rate = 0.92;
+    utterance.pitch = 1.0;
+    utterance.volume = 1;
+
+    const chosenVoice = selectVoice(
+      utterance.lang,
+      $("voice").value
     );
 
-    if (matching.length) {
-      utterance.voice = $("voice").value === "female"
-        ? matching.find(v => /female/i.test(v.name)) || matching[0]
-        : matching[0];
+    if (chosenVoice) {
+      utterance.voice = chosenVoice;
+      utterance.lang = chosenVoice.lang;
     }
 
     utterance.onstart = () => state("Speaking");
+
     utterance.onend = () => {
       if (!isThinking) state("System ready");
     };
-    utterance.onerror = () => state("Text response ready");
+
+    utterance.onerror = event => {
+      if (event.error !== "canceled" && event.error !== "interrupted") {
+        state("Voice playback unavailable");
+      }
+    };
 
     speechSynthesis.speak(utterance);
   }
@@ -153,15 +214,31 @@ select{width:100%;padding:11px}
     if (isThinking) return;
 
     isThinking = true;
+    const currentRequest = ++requestNumber;
+
     $("mic").disabled = true;
-    state("Thinking...");
+    state("Thinking");
     $("reply").textContent = "Friday is thinking...";
 
     try {
+      const languagePreference = $("language").value === "ta-IN"
+        ? "Reply in natural Tamil. Use clear, conversational Tamil."
+        : "Reply in natural English. If the user speaks Tanglish, you may reply in natural Tanglish.";
+
+      const instructions =
+        "You are F.R.I.D.A.Y., a smart, friendly personal AI assistant. " +
+        "Be natural, helpful, and conversational. " +
+        "Usually answer simple questions in 1 to 4 short sentences. " +
+        "Avoid unnecessary introductions, repeated summaries, and long lists. " +
+        "Explain complicated topics step by step when needed. " +
+        "Never pretend to perform a phone action you cannot perform. " +
+        languagePreference +
+        "\nUser's message: " + message;
+
       const response = await fetch(WORKER_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message })
+        body: JSON.stringify({ message: instructions })
       });
 
       const contentType = response.headers.get("content-type") || "";
@@ -171,31 +248,38 @@ select{width:100%;padding:11px}
         data = await response.json();
       } else {
         throw new Error(
-          "Worker returned a non-JSON response (HTTP " + response.status + ")."
+          "Unexpected server response. HTTP " + response.status
         );
       }
 
       if (!response.ok) {
         throw new Error(
-          data.error || "Worker request failed (HTTP " + response.status + ")."
+          data.error || "AI request failed. HTTP " + response.status
         );
       }
 
       if (!data.answer) {
-        throw new Error(data.error || "No AI answer received from Worker.");
+        throw new Error("Friday did not receive an answer.");
       }
 
-      $("heard").textContent = "Sent to Friday: " + message;
+      if (currentRequest !== requestNumber) return;
+
+      $("heard").textContent = "You said: " + message;
       speak(data.answer);
 
     } catch (error) {
+      if (currentRequest !== requestNumber) return;
+
       console.error("Friday AI error:", error);
-      const detail = error && error.message ? error.message : String(error);
-      $("reply").textContent = "Connection error: " + detail;
-      state("Connection failed - check error message");
+      $("reply").textContent =
+        "I couldn't get a response. " +
+        (error.message || "Please try again.");
+      state("Connection error");
     } finally {
-      isThinking = false;
-      $("mic").disabled = false;
+      if (currentRequest === requestNumber) {
+        isThinking = false;
+        $("mic").disabled = false;
+      }
     }
   }
 
@@ -206,8 +290,8 @@ select{width:100%;padding:11px}
     if (/^(hello|hi|hey)( friday)?[!. ]*$/.test(text) ||
         /^(வணக்கம்|ஹலோ)$/.test(text)) {
       speak($("language").value === "ta-IN"
-        ? "வணக்கம்! நான் ஃப்ரைடே. எப்படி உதவலாம்?"
-        : "Hello! I'm Friday. How can I help you?");
+        ? "வணக்கம்! நான் ஃப்ரைடே. என்ன உதவி வேண்டும்?"
+        : "Hello! Friday here. What can I help you with?");
       return;
     }
 
@@ -218,9 +302,14 @@ select{width:100%;padding:11px}
     }
 
     if (/^(what time|tell me the time|time now|what time is it)\??$/.test(text)) {
-      speak("The time is " + new Date().toLocaleTimeString([], {
-        hour: "numeric", minute: "2-digit"
-      }));
+      const time = new Date().toLocaleTimeString([], {
+        hour: "numeric",
+        minute: "2-digit"
+      });
+
+      speak($("language").value === "ta-IN"
+        ? "இப்போதைய நேரம் " + time
+        : "The time is " + time);
       return;
     }
 
@@ -228,8 +317,14 @@ select{width:100%;padding:11px}
       if (navigator.getBattery) {
         try {
           const battery = await navigator.getBattery();
-          speak("Battery is " + Math.round(battery.level * 100) +
-            " percent" + (battery.charging ? " and charging." : "."));
+          const percent = Math.round(battery.level * 100);
+
+          speak($("language").value === "ta-IN"
+            ? "பேட்டரி அளவு " + percent +
+              " சதவீதம்" +
+              (battery.charging ? ". சார்ஜ் ஆகிக்கொண்டிருக்கிறது." : ".")
+            : "Battery is " + percent + " percent" +
+              (battery.charging ? " and charging." : "."));
         } catch {
           speak("Battery information is unavailable.");
         }
@@ -255,8 +350,14 @@ select{width:100%;padding:11px}
     if (!SpeechRecognition) {
       state("Speech recognition unsupported");
       $("reply").textContent =
-        "Speech recognition is not supported in this browser. Try Chrome and allow microphone access.";
+        "Speech recognition is unavailable in this browser. Try Chrome and allow microphone access.";
       return;
+    }
+
+    if (isThinking) return;
+
+    if ("speechSynthesis" in window) {
+      speechSynthesis.cancel();
     }
 
     try {
@@ -266,45 +367,101 @@ select{width:100%;padding:11px}
 
       recognition = new SpeechRecognition();
       recognition.lang = $("language").value;
-      recognition.interimResults = false;
+      recognition.interimResults = true;
       recognition.maxAlternatives = 1;
+      recognition.continuous = false;
 
-      recognition.onstart = () => state("Listening...");
+      let finalTranscript = "";
+
+      recognition.onstart = () => {
+        state("Listening");
+        $("reply").textContent = "I'm listening...";
+        $("mic").disabled = true;
+      };
+
+      recognition.onresult = event => {
+        let interimTranscript = "";
+
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const transcript = event.results[i][0].transcript;
+
+          if (event.results[i].isFinal) {
+            finalTranscript += transcript;
+          } else {
+            interimTranscript += transcript;
+          }
+        }
+
+        $("heard").textContent =
+          "Heard: " + (finalTranscript || interimTranscript);
+      };
+
       recognition.onerror = event => {
         state("Microphone needs attention");
         $("reply").textContent =
           "Speech error: " + event.error +
           ". Check microphone permission and try again.";
+        $("mic").disabled = false;
       };
+
       recognition.onend = () => {
-        if ($("state").textContent === "LISTENING...") {
+        $("mic").disabled = false;
+
+        const message = finalTranscript.trim();
+
+        if (message) {
+          respond(message);
+        } else if ($("state").textContent === "LISTENING") {
           state("System ready");
         }
       };
-      recognition.onresult = event => {
-        respond(event.results[0][0].transcript);
-      };
+
       recognition.start();
 
     } catch (error) {
       console.error("Microphone error:", error);
+      $("mic").disabled = false;
       state("Could not start microphone");
-      $("reply").textContent = "Microphone error: " + error.message;
+      $("reply").textContent =
+        "Microphone error: " + error.message;
     }
   }
 
   $("mic").onclick = listen;
 
   $("stop").onclick = () => {
+    requestNumber++;
+    isThinking = false;
+
     if (recognition) {
-      try { recognition.stop(); } catch {}
+      try { recognition.abort(); } catch {}
     }
-    if (window.speechSynthesis) speechSynthesis.cancel();
+
+    if ("speechSynthesis" in window) {
+      speechSynthesis.cancel();
+    }
+
+    $("mic").disabled = false;
     state("Voice stopped");
   };
 
   $("battery").onclick = () => respond("battery status");
   $("time").onclick = () => respond("what time is it");
+
+  $("language").onchange = () => {
+    if (recognition) {
+      try { recognition.abort(); } catch {}
+    }
+    state("Language updated");
+    $("heard").textContent =
+      "Recognition and speech language updated.";
+  };
+
+  $("voice").onchange = () => {
+    $("heard").textContent =
+      "Voice preference updated. It applies to the next response.";
+    state("Voice preference updated");
+  };
 
 })();
 </script>
